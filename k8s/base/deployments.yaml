@@ -549,7 +549,7 @@ spec:
         runAsNonRoot: true
       containers:
         - name: forwarder
-          image: ghcr.io/your-org/wazuh-airia-forwarder:latest
+          image: willey2003/wazuh-airia-forwarder:latest
           ports:
             - containerPort: 8010
               name: http
