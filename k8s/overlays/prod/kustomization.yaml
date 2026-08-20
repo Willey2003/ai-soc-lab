@@ -1,0 +1,116 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: soc-lab
+
+resources:
+  - ../../base
+
+commonLabels:
+  environment: production
+
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: wazuh-indexer
+        namespace: soc-lab
+      spec:
+        replicas: 3
+        template:
+          spec:
+            containers:
+              - name: wazuh-indexer
+                resources:
+                  requests:
+                    memory: "4Gi"
+                    cpu: "2000m"
+                  limits:
+                    memory: "8Gi"
+                    cpu: "4000m"
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: wazuh-manager
+        namespace: soc-lab
+      spec:
+        replicas: 2
+        template:
+          spec:
+            containers:
+              - name: wazuh-manager
+                resources:
+                  requests:
+                    memory: "4Gi"
+                    cpu: "1000m"
+                  limits:
+                    memory: "8Gi"
+                    cpu: "2000m"
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: grafana
+        namespace: soc-lab
+      spec:
+        replicas: 2
+        template:
+          spec:
+            containers:
+              - name: grafana
+                resources:
+                  requests:
+                    memory: "512Mi"
+                    cpu: "250m"
+                  limits:
+                    memory: "2Gi"
+                    cpu: "1000m"
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: netalertx
+        namespace: soc-lab
+      spec:
+        replicas: 2
+        template:
+          spec:
+            containers:
+              - name: netalertx
+                resources:
+                  requests:
+                    memory: "1Gi"
+                    cpu: "500m"
+                  limits:
+                    memory: "4Gi"
+                    cpu: "2000m"
+
+replicas:
+  - name: wazuh-manager
+    count: 2
+  - name: netalertx
+    count: 2
+  - name: grafana
+    count: 2
+
+configMapGenerator:
+  - name: netalertx-config
+    behavior: replace
+    literals:
+      - config.json={"GRAPHQL_PORT":"20212","SCAN_SUBNETS":"['192.168.0.0/24','10.0.0.0/8']","SCAN_INTERVAL":300,"LOG_LEVEL":"info"}
+
+images:
+  - name: wazuh/wazuh-indexer
+    newTag: 4.14.0
+  - name: wazuh/wazuh-manager
+    newTag: 4.14.0
+  - name: wazuh/wazuh-dashboard
+    newTag: 4.14.0
+  - name: ghcr.io/netalertx/netalertx
+    newTag: latest
+  - name: grafana/grafana
+    newTag: 11.0.0
+  - name: docker.elastic.co/beats/filebeat
+    newTag: 8.13.0

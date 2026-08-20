@@ -1,0 +1,428 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wazuh-indexer-config
+  namespace: soc-lab
+data:
+  opensearch.yml: |
+    cluster.name: wazuh
+    network.host: 0.0.0.0
+    http.port: 9200
+    transport.port: 9300
+    discovery.type: single-node
+    plugins.security.disabled: false
+    plugins.security.ssl.transport.enabled: true
+    plugins.security.ssl.http.enabled: true
+    plugins.security.ssl.transport.pemcert_filepath: certs/indexer.pem
+    plugins.security.ssl.transport.pemkey_filepath: certs/indexer.key
+    plugins.security.ssl.transport.pemtrustedcas_filepath: certs/root-ca.pem
+    plugins.security.ssl.http.pemcert_filepath: certs/indexer.pem
+    plugins.security.ssl.http.pemkey_filepath: certs/indexer.key
+    plugins.security.ssl.http.pemtrustedcas_filepath: certs/root-ca.pem
+    plugins.security.allow_unsafe_democertificates: false
+    plugins.security.authcz.admin_dn:
+      - "CN=admin,OU=Wazuh,O=Wazuh,L=San Jose,ST=California,C=US"
+    node.max_local_storage_nodes: 1
+    bootstrap.memory_lock: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wazuh-manager-config
+  namespace: soc-lab
+data:
+  ossec.conf: |
+    <ossec_config>
+      <global>
+        <jsonout_output>yes</jsonout_output>
+        <alerts_log>yes</alerts_log>
+        <logall>no</logall>
+        <logall_json>no</logall_json>
+      </global>
+      <alerts>
+        <log_alert_level>3</log_alert_level>
+        <email_alert_level>12</email_alert_level>
+      </alerts>
+      <connection>
+        <port>1514</port>
+        <protocol>tcp</protocol>
+        <queue_size>131072</queue_size>
+        <max_log_size>100M</max_log_size>
+      </connection>
+      <auth>
+        <enabled>yes</enabled>
+        <port>1515</port>
+        <ssl_agent_ca>/var/ossec/etc/sslmanager.cert</ssl_agent_ca>
+        <ssl_verify_host>no</ssl_verify_host>
+        <ssl_manager_cert>/var/ossec/etc/sslmanager.cert</ssl_manager_cert>
+        <ssl_manager_key>/var/ossec/etc/sslmanager.key</ssl_manager_key>
+        <ssl_auto_negotiate>no</ssl_auto_negotiate>
+        <ciphers>HIGH:!ADH:!EXP:!MD5:!RC4:!3DES:!CAMELLIA:@STRENGTH</ciphers>
+        <limit_maxagents>yes</limit_maxagents>
+      </auth>
+      <cluster>
+        <name>wazuh</name>
+        <node_name>wazuh-manager</node_name>
+        <node_type>master</node_type>
+        <key>/var/ossec/etc/cluster.key</key>
+        <interval>15</interval>
+        <port>1516</port>
+        <bind_addr>0.0.0.0</bind_addr>
+        <nodes>
+          <node>wazuh-manager</node>
+        </nodes>
+        <hidden>no</hidden>
+        <disabled>no</disabled>
+      </cluster>
+      <remote>
+        <connection>secure</connection>
+        <port>1514</port>
+        <protocol>tcp</protocol>
+        <queue_size>131072</queue_size>
+      </remote>
+      <analysisd>
+        <default_timeframe>3600</default_timeframe>
+        <max_timeframe>86400</max_timeframe>
+        <rule_cache_size>100000</rule_cache_size>
+        <event_queue_size>16384</event_queue_size>
+        <syscheck_event_queue_size>16384</syscheck_event_queue_size>
+        <rootcheck_event_queue_size>16384</rootcheck_event_queue_size>
+        <sca_event_queue_size>16384</sca_event_queue_size>
+        <hostinfo_event_queue_size>16384</hostinfo_event_queue_size>
+        <winevt_event_queue_size>16384</winevt_event_queue_size>
+        <statistical_event_queue_size>16384</statistical_event_queue_size>
+        <decoder_event_queue_size>16384</decoder_event_queue_size>
+        <alert_queue_size>16384</alert_queue_size>
+        <max_eps>5000</max_eps>
+      </analysisd>
+      <syscheck>
+        <disabled>no</disabled>
+        <frequency>43200</frequency>
+        <scan_on_start>yes</scan_on_start>
+        <auto_ignore>no</auto_ignore>
+        <alert_new_files>yes</alert_new_files>
+        <directories check_all="yes" report_changes="yes" realtime="yes">/var/ossec/logs/alerts</directories>
+      </syscheck>
+      <rootcheck>
+        <disabled>no</disabled>
+        <check_dev>yes</check_dev>
+        <check_files>yes</check_files>
+        <check_if>yes</check_if>
+        <check_pids>yes</check_pids>
+        <check_ports>yes</check_ports>
+        <check_sys>yes</check_sys>
+        <check_trojans>yes</check_trojans>
+        <check_unixaudit>yes</check_unixaudit>
+        <check_winapps>yes</check_winapps>
+        <check_winaudit>yes</check_winaudit>
+        <check_winmalware>yes</check_winmalware>
+        <skip_nfs>yes</skip_nfs>
+      </rootcheck>
+      <wodle name="vulnerability-detector">
+        <disabled>no</disabled>
+        <interval>5m</interval>
+        <scan_on_start>yes</scan_on_start>
+        <min_full_scan_interval>6h</min_full_scan_interval>
+        <provider name="canonical">
+          <enabled>yes</enabled>
+          <os>trusty</os>
+          <os>xenial</os>
+          <os>bionic</os>
+          <os>focal</os>
+          <os>jammy</os>
+          <update_interval>1h</update_interval>
+        </provider>
+        <provider name="debian">
+          <enabled>yes</enabled>
+          <os>stretch</os>
+          <os>buster</os>
+          <os>bullseye</os>
+          <os>bookworm</os>
+          <update_interval>1h</update_interval>
+        </provider>
+        <provider name="redhat">
+          <enabled>yes</enabled>
+          <os>7</os>
+          <os>8</os>
+          <os>9</os>
+          <update_interval>1h</update_interval>
+        </provider>
+        <provider name="amazon">
+          <enabled>yes</enabled>
+          <update_interval>1h</update_interval>
+        </provider>
+        <provider name="alpine">
+          <enabled>yes</enabled>
+          <update_interval>1h</update_interval>
+        </provider>
+        <provider name="oracle">
+          <enabled>yes</enabled>
+          <os>7</os>
+          <os>8</os>
+          <os>9</os>
+          <update_interval>1h</update_interval>
+        </provider>
+        <provider name="microsoft">
+          <enabled>yes</enabled>
+          <update_interval>1h</update_interval>
+        </provider>
+      </wodle>
+      <api>
+        <enabled>yes</enabled>
+        <port>55000</port>
+        <bind_addr>0.0.0.0</bind_addr>
+        <https>yes</https>
+        <ssl_manager_cert>/var/ossec/etc/sslmanager.cert</ssl_manager_cert>
+        <ssl_manager_key>/var/ossec/etc/sslmanager.key</ssl_manager_key>
+        <ssl_auto_negotiate>no</ssl_auto_negotiate>
+        <ciphers>HIGH:!ADH:!EXP:!MD5:!RC4:!3DES:!CAMELLIA:@STRENGTH</ciphers>
+        <limit_maxagents>yes</limit_maxagents>
+        <purge_agents>yes</purge_agents>
+        <purge_interval>1d</purge_interval>
+      </api>
+      <output>
+        <output>
+          <type>json</type>
+          <location>/var/ossec/logs/alerts/alerts.json</location>
+          <filter>
+            <level>3</level>
+          </filter>
+        </output>
+      </output>
+    </ossec_config>
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: netalertx-config
+  namespace: soc-lab
+data:
+  config.json: |
+    {
+      "GRAPHQL_PORT": "20212",
+      "SCAN_SUBNETS": ["192.168.0.0/24"],
+      "SCAN_INTERVAL": 300,
+      "SCAN_TIMEOUT": 10,
+      "PING_TIMEOUT": 2,
+      "PORT_SCAN_PORTS": "21,22,23,25,53,80,110,139,443,445,993,995,1723,3306,3389,5432,5900,8080",
+      "MAC_VENDOR_LOOKUP": true,
+      "HOSTNAME_LOOKUP": true,
+      "OS_FINGERPRINTING": true,
+      "SERVICE_DETECTION": true,
+      "WEB_INTERFACE_PORT": 20211,
+      "WEB_INTERFACE_BIND": "0.0.0.0",
+      "API_TOKEN": "",
+      "LOG_LEVEL": "info",
+      "DATA_DIR": "/data"
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: soc-lab
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Wazuh OpenSearch
+        type: grafana-opensearch-datasource
+        access: proxy
+        url: https://wazuh-indexer:9200
+        database: wazuh-alerts-4.x-*
+        user: grafana_reader
+        secureJsonData:
+          password: ${WAZUH_GRAFANA_PASSWORD}
+        jsonData:
+          version: "2.11.0"
+          tlsSkipVerify: false
+          tlsAuth: true
+          tlsAuthWithCACert: true
+        editable: false
+      - name: NetAlertX Infinity
+        type: yesoreyeram-infinity-datasource
+        access: proxy
+        url: http://netalertx:20212
+        jsonData:
+          type: json
+          method: GET
+          headers:
+            - name: Authorization
+              value: Bearer ${NETALERTX_API_TOKEN}
+          allowedHosts:
+            - "http://netalertx:20212"
+        editable: false
+      - name: Airia Wazuh Forwarder
+        type: yesoreyeram-infinity-datasource
+        access: proxy
+        url: http://wazuh-airia-forwarder:8010
+        jsonData:
+          type: json
+          method: GET
+          headers:
+            - name: X-API-Key
+              value: ${HELPER_API_KEY}
+          allowedHosts:
+            - "http://wazuh-airia-forwarder:8010"
+        editable: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: soc-lab
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'SOC Lab Dashboards'
+        orgId: 1
+        folder: 'Network Security and AI Operations'
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-network-security
+  namespace: soc-lab
+data:
+  network-security-ai-operations.json: |
+    {
+      "annotations": {"list": [{"builtIn": 1, "datasource": "-- Grafana --", "enable": true, "hide": true, "iconColor": "rgba(0, 211, 255, 1)", "name": "Annotations & Alerts", "type": "dashboard"}]},
+      "editable": true,
+      "gnetId": null,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "datasource": "Wazuh OpenSearch",
+          "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [{"options": {"added": {"color": "green", "index": 0}, "deleted": {"color": "red", "index": 2}, "modified": {"color": "yellow", "index": 1}, "unknown": {"color": "gray", "index": 3}}, "type": "value"}], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 10}, {"color": "red", "value": 30}]}, "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
+          "id": 1,
+          "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}, "text": {}, "textMode": "auto"},
+          "pluginVersion": "11.0.0",
+          "targets": [{"datasource": "Wazuh OpenSearch", "query": "rule.groups:syscheck", "queryType": "lucene", "format": "time_series", "metricColumn": "", "bucketAggs": [{"type": "date_histogram", "field": "@timestamp", "interval": "auto"}], "metrics": [{"type": "count"}], "refId": "A"}],
+          "title": "FIM Events (24h)",
+          "type": "stat"
+        },
+        {
+          "datasource": "NetAlertX Infinity",
+          "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}]}, "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0},
+          "id": 2,
+          "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}, "text": {}, "textMode": "auto"},
+          "pluginVersion": "11.0.0",
+          "targets": [{"datasource": "NetAlertX Infinity", "format": "json", "parser": "jq", "rootSelector": "[.devices | map(select(((.devStatus // \"\") | ascii_downcase) == \"online\" or ((.devStatus // \"\") | ascii_downcase) == \"on-line\")) | {online_devices:length}][]", "url": "/devices", "refId": "A"}],
+          "title": "Online Devices",
+          "type": "stat"
+        },
+        {
+          "datasource": "Airia Wazuh Forwarder",
+          "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "max": 100, "min": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 50}, {"color": "orange", "value": 70}, {"color": "red", "value": 85}]}, "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 4, "w": 4, "x": 8, "y": 0},
+          "id": 3,
+          "options": {"orientation": "auto", "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}, "showThresholdLabels": true, "showThresholdMarkers": true},
+          "pluginVersion": "11.0.0",
+          "targets": [{"datasource": "Airia Wazuh Forwarder", "format": "json", "parser": "jq", "rootSelector": ".", "url": "/api/latest", "refId": "A"}],
+          "title": "Latest Airia Risk Score",
+          "type": "gauge"
+        },
+        {
+          "datasource": "Airia Wazuh Forwarder",
+          "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "unit": "short"}, "overrides": []},
+          "gridPos": {"h": 4, "w": 12, "x": 12, "y": 0},
+          "id": 4,
+          "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""}, "text": {}, "textMode": "auto"},
+          "pluginVersion": "11.0.0",
+          "targets": [{"datasource": "Airia Wazuh Forwarder", "format": "json", "parser": "jq", "rootSelector": ".", "url": "/api/latest", "refId": "A"}],
+          "title": "Latest Alert Name",
+          "type": "stat"
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["wazuh", "netalertx", "airia", "fim", "soc"],
+      "templating": {"list": []},
+      "time": {"from": "now-24h", "to": "now"},
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Network Security and AI Operations",
+      "uid": "network-security-ai-operations",
+      "version": 1,
+      "weekStart": ""
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: filebeat-config
+  namespace: soc-lab
+data:
+  filebeat.yml: |
+    filebeat.inputs:
+      - type: log
+        enabled: true
+        paths:
+          - /var/ossec/logs/alerts/alerts.json
+        json.keys_under_root: true
+        json.add_error_key: true
+        json.overwrite_keys: true
+        fields:
+          service: wazuh
+        fields_under_root: true
+        scan_frequency: 10s
+        tail_files: true
+        ignore_older: 72h
+        close_inactive: 5m
+        close_removed: true
+        close_renamed: true
+        close_eof: false
+
+    filebeat.config.modules:
+      path: ${path.config}/modules.d/*.yml
+      reload.enabled: false
+
+    processors:
+      - add_host_metadata:
+          when.not.contains.tags: forwarded
+      - add_cloud_metadata: ~
+      - add_docker_metadata: ~
+      - add_kubernetes_metadata: ~
+
+    output.elasticsearch:
+      hosts: ["https://wazuh-indexer:9200"]
+      username: "grafana_reader"
+      password: "${WAZUH_GRAFANA_PASSWORD}"
+      ssl.enabled: true
+      ssl.certificate_authorities: ["/etc/filebeat/certs/root-ca.pem"]
+      ssl.verification_mode: "full"
+      index: "wazuh-alerts-4.x-%{+yyyy.MM.dd}"
+      bulk_max_size: 1000
+      compression_level: 3
+      worker: 2
+
+    setup.template.settings:
+      index.number_of_shards: 1
+      index.number_of_replicas: 0
+
+    setup.ilm.enabled: false
+
+    logging.level: info
+    logging.to_files: true
+    logging.files:
+      path: /var/log/filebeat
+      name: filebeat
+      keepfiles: 7
+      permissions: 0644
+
+    queue.mem:
+      events: 4096
+      flush.min_events: 512
+      flush.timeout: 5s

@@ -1,0 +1,16 @@
+opensearch.hosts: ["https://wazuh-indexer:9200"]
+opensearch.ssl.verificationMode: full
+opensearch.ssl.certificateAuthorities: ["/etc/wazuh-dashboard/certs/root-ca.pem"]
+opensearch.username: "grafana_reader"
+opensearch.password: "${WAZUH_GRAFANA_PASSWORD}"
+opensearch.requestHeadersWhitelist: ["securitytenant", "Authorization"]
+server.host: "0.0.0.0"
+server.port: 5601
+server.ssl.enabled: true
+server.ssl.certificate: "/etc/wazuh-dashboard/certs/dashboard.pem"
+server.ssl.key: "/etc/wazuh-dashboard/certs/dashboard.key"
+wazuh.api.host: "https://wazuh-manager:55000"
+wazuh.api.username: "wazuh-api"
+wazuh.api.password: "${WAZUH_API_PASSWORD}"
+wazuh.api.ssl.verificationMode: full
+wazuh.api.ssl.certificateAuthorities: ["/etc/wazuh-dashboard/certs/root-ca.pem"]

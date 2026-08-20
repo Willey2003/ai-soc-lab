@@ -1,0 +1,883 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: wazuh-indexer
+  namespace: soc-lab
+  labels:
+    app: wazuh-indexer
+    component: indexer
+spec:
+  serviceName: wazuh-indexer
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wazuh-indexer
+  template:
+    metadata:
+      labels:
+        app: wazuh-indexer
+        component: indexer
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsGroup: 1000
+      initContainers:
+        - name: init-sysctl
+          image: busybox:1.36
+          command: ["sysctl", "-w", "vm.max_map_count=262144"]
+          securityContext:
+            privileged: true
+      containers:
+        - name: wazuh-indexer
+          image: wazuh/wazuh-indexer:4.14.0
+          ports:
+            - containerPort: 9200
+              name: http
+            - containerPort: 9300
+              name: transport
+          env:
+            - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: soc-lab-secrets
+                  key: wazuh-admin-password
+            - name: OPENSEARCH_JAVA_OPTS
+              value: "-Xms2g -Xmx2g"
+            - name: bootstrap.memory_lock
+              value: "true"
+          resources:
+            requests:
+              memory: "3Gi"
+              cpu: "1000m"
+            limits:
+              memory: "4Gi"
+              cpu: "2000m"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/wazuh-indexer
+            - name: certs
+              mountPath: /etc/wazuh-indexer/certs
+            - name: config
+              mountPath: /etc/wazuh-indexer/opensearch.yml
+              subPath: opensearch.yml
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+              scheme: HTTPS
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+              scheme: HTTPS
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: config
+          configMap:
+            name: wazuh-indexer-config
+            items:
+              - key: opensearch.yml
+                path: opensearch.yml
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: fast-ssd
+        resources:
+          requests:
+            storage: 50Gi
+    - metadata:
+        name: certs
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: fast-ssd
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wazuh-indexer
+  namespace: soc-lab
+  labels:
+    app: wazuh-indexer
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9200
+      targetPort: 9200
+      name: http
+    - port: 9300
+      targetPort: 9300
+      name: transport
+  selector:
+    app: wazuh-indexer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wazuh-manager
+  namespace: soc-lab
+  labels:
+    app: wazuh-manager
+    component: manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wazuh-manager
+  template:
+    metadata:
+      labels:
+        app: wazuh-manager
+        component: manager
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: wazuh-manager
+          image: wazuh/wazuh-manager:4.14.0
+          ports:
+            - containerPort: 1514
+              name: agent-tcp
+            - containerPort: 1515
+              name: agent-auth
+            - containerPort: 55000
+              name: api
+          env:
+            - name: WAZUH_INDEXER_URL
+              value: "https://wazuh-indexer:9200"
+            - name: WAZUH_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: soc-lab-secrets
+                  key: wazuh-admin-password
+            - name: WAZUH_API_USER
+              value: "wazuh-api"
+            - name: WAZUH_API_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: soc-lab-secrets
+                  key: wazuh-api-password
+            - name: FILEBEAT_SSL_VERIFICATION_MODE
+              value: "full"
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "500m"
+            limits:
+              memory: "4Gi"
+              cpu: "2000m"
+          volumeMounts:
+            - name: data
+              mountPath: /var/ossec/data
+            - name: logs
+              mountPath: /var/ossec/logs
+            - name: etc
+              mountPath: /var/ossec/etc
+            - name: config
+              mountPath: /var/ossec/etc/ossec.conf
+              subPath: ossec.conf
+              readOnly: true
+          livenessProbe:
+            exec:
+              command: ["/var/ossec/bin/wazuh-control", "status"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["/var/ossec/bin/wazuh-control", "status"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: wazuh-manager-data
+        - name: logs
+          persistentVolumeClaim:
+            claimName: wazuh-manager-logs
+        - name: etc
+          persistentVolumeClaim:
+            claimName: wazuh-manager-etc
+        - name: config
+          configMap:
+            name: wazuh-manager-config
+            items:
+              - key: ossec.conf
+                path: ossec.conf
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wazuh-manager
+  namespace: soc-lab
+  labels:
+    app: wazuh-manager
+spec:
+  type: ClusterIP
+  ports:
+    - port: 1514
+      targetPort: 1514
+      name: agent-tcp
+    - port: 1515
+      targetPort: 1515
+      name: agent-auth
+    - port: 55000
+      targetPort: 55000
+      name: api
+  selector:
+    app: wazuh-manager
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wazuh-manager-data
+  namespace: soc-lab
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wazuh-manager-logs
+  namespace: soc-lab
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wazuh-manager-etc
+  namespace: soc-lab
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wazuh-dashboard
+  namespace: soc-lab
+  labels:
+    app: wazuh-dashboard
+    component: dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wazuh-dashboard
+  template:
+    metadata:
+      labels:
+        app: wazuh-dashboard
+        component: dashboard
+    spec:
+      containers:
+        - name: wazuh-dashboard
+          image: wazuh/wazuh-dashboard:4.14.0
+          ports:
+            - containerPort: 5601
+              name: http
+          env:
+            - name: WAZUH_INDEXER_URL
+              value: "https://wazuh-indexer:9200"
+            - name: WAZUH_API_URL
+              value: "https://wazuh-manager:55000"
+            - name: WAZUH_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: soc-lab-secrets
+                  key: wazuh-admin-password
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/wazuh-dashboard/data
+            - name: config
+              mountPath: /etc/wazuh-dashboard/opensearch_dashboards.yml
+              subPath: opensearch_dashboards.yml
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/status
+              port: 5601
+              scheme: HTTPS
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/status
+              port: 5601
+              scheme: HTTPS
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: wazuh-dashboard-data
+        - name: config
+          configMap:
+            name: wazuh-dashboard-config
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wazuh-dashboard-data
+  namespace: soc-lab
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wazuh-dashboard-config
+  namespace: soc-lab
+data:
+  opensearch_dashboards.yml: |
+    opensearch.hosts: ["https://wazuh-indexer:9200"]
+    opensearch.ssl.verificationMode: full
+    opensearch.ssl.certificateAuthorities: ["/etc/wazuh-dashboard/certs/root-ca.pem"]
+    opensearch.username: "grafana_reader"
+    opensearch.password: "${WAZUH_GRAFANA_PASSWORD}"
+    opensearch.requestHeadersWhitelist: ["securitytenant", "Authorization"]
+    server.host: "0.0.0.0"
+    server.port: 5601
+    server.ssl.enabled: true
+    server.ssl.certificate: "/etc/wazuh-dashboard/certs/dashboard.pem"
+    server.ssl.key: "/etc/wazuh-dashboard/certs/dashboard.key"
+    wazuh.api.host: "https://wazuh-manager:55000"
+    wazuh.api.username: "wazuh-api"
+    wazuh.api.password: "${WAZUH_API_PASSWORD}"
+    wazuh.api.ssl.verificationMode: full
+    wazuh.api.ssl.certificateAuthorities: ["/etc/wazuh-dashboard/certs/root-ca.pem"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wazuh-dashboard
+  namespace: soc-lab
+  labels:
+    app: wazuh-dashboard
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5601
+      targetPort: 5601
+      name: http
+  selector:
+    app: wazuh-dashboard
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netalertx
+  namespace: soc-lab
+  labels:
+    app: netalertx
+    component: network-monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: netalertx
+  template:
+    metadata:
+      labels:
+        app: netalertx
+        component: network-monitoring
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: netalertx
+          image: ghcr.io/netalertx/netalertx:latest
+          ports:
+            - containerPort: 20211
+              name: web
+              hostPort: 20211
+            - containerPort: 20212
+              name: graphql
+              hostPort: 20212
+          env:
+            - name: PORT
+              value: "20211"
+            - name: LISTEN_ADDR
+              value: "0.0.0.0"
+            - name: APP_CONF_OVERRIDE
+              value: '{"GRAPHQL_PORT":"20212","SCAN_SUBNETS":"['"'"'192.168.0.0/24'"'"']"}'
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /app/config.json
+              subPath: config.json
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 20211
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 20211
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            runAsUser: 20211
+            runAsGroup: 20211
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: netalertx-data
+        - name: config
+          configMap:
+            name: netalertx-config
+            items:
+              - key: config.json
+                path: config.json
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: netalertx-data
+  namespace: soc-lab
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: netalertx
+  namespace: soc-lab
+  labels:
+    app: netalertx
+spec:
+  type: ClusterIP
+  ports:
+    - port: 20211
+      targetPort: 20211
+      name: web
+    - port: 20212
+      targetPort: 20212
+      name: graphql
+  selector:
+    app: netalertx
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wazuh-airia-forwarder
+  namespace: soc-lab
+  labels:
+    app: wazuh-airia-forwarder
+    component: ai-analysis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wazuh-airia-forwarder
+  template:
+    metadata:
+      labels:
+        app: wazuh-airia-forwarder
+        component: ai-analysis
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        runAsNonRoot: true
+      containers:
+        - name: forwarder
+          image: ghcr.io/your-org/wazuh-airia-forwarder:latest
+          ports:
+            - containerPort: 8010
+              name: http
+          env:
+            - name: AIRIA_API_URL
+              valueFrom:
+                secretKeyRef:
+                  name: soc-lab-secrets
+                  key: airia-api-url
+            - name: AIRIA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: soc-lab-secrets
+                  key: airia-api-key
+            - name: LOCAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: soc-lab-secrets
+                  key: helper-api-key
+            - name: LOCAL_API_HEADER
+              value: "X-API-Key"
+            - name: WAZUH_ALERTS_FILE
+              value: "/var/ossec/logs/alerts/alerts.json"
+            - name: ANALYSES_FILE
+              value: "/var/lib/wazuh-airia-forwarder/analyses.jsonl"
+            - name: STATE_FILE
+              value: "/var/lib/wazuh-airia-forwarder/state.json"
+            - name: BIND_HOST
+              value: "0.0.0.0"
+            - name: BIND_PORT
+              value: "8010"
+            - name: REQUEST_TIMEOUT_SECONDS
+              value: "120"
+            - name: FORWARD_EXISTING_ON_FIRST_START
+              value: "false"
+            - name: INCLUDE_FILE_DIFF
+              value: "false"
+            - name: LOG_LEVEL
+              value: "INFO"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: wazuh-logs
+              mountPath: /var/ossec/logs
+              readOnly: true
+            - name: forwarder-data
+              mountPath: /var/lib/wazuh-airia-forwarder
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8010
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8010
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: wazuh-logs
+          persistentVolumeClaim:
+            claimName: wazuh-manager-logs
+        - name: forwarder-data
+          persistentVolumeClaim:
+            claimName: forwarder-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forwarder-data
+  namespace: soc-lab
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wazuh-airia-forwarder
+  namespace: soc-lab
+  labels:
+    app: wazuh-airia-forwarder
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8010
+      targetPort: 8010
+      name: http
+  selector:
+    app: wazuh-airia-forwarder
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: soc-lab
+  labels:
+    app: grafana
+    component: visualization
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+        component: visualization
+    spec:
+      securityContext:
+        fsGroup: 472
+        runAsUser: 472
+        runAsGroup: 472
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.0.0
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: "admin"
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: soc-lab-secrets
+                  key: grafana-admin-password
+            - name: GF_INSTALL_PLUGINS
+              value: "grafana-opensearch-datasource,yesoreyeram-infinity-datasource"
+            - name: GF_DATABASE_TYPE
+              value: "sqlite3"
+            - name: GF_DATABASE_PATH
+              value: "/var/lib/grafana/grafana.db"
+            - name: GF_LOG_LEVEL
+              value: "info"
+            - name: GF_SERVER_ROOT_URL
+              value: "http://localhost:3000"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/grafana
+            - name: provisioning
+              mountPath: /etc/grafana/provisioning
+              readOnly: true
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: grafana-data
+        - name: provisioning
+          configMap:
+            name: grafana-datasources
+            items:
+              - key: datasources.yaml
+                path: datasources/datasources.yaml
+        - name: dashboards
+          configMap:
+            name: grafana-dashboard-network-security
+            items:
+              - key: network-security-ai-operations.json
+                path: network-security-ai-operations.json
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data
+  namespace: soc-lab
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: soc-lab
+  labels:
+    app: grafana
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http
+  selector:
+    app: grafana
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: filebeat
+  namespace: soc-lab
+  labels:
+    app: filebeat
+    component: log-forwarder
+spec:
+  selector:
+    matchLabels:
+      app: filebeat
+  template:
+    metadata:
+      labels:
+        app: filebeat
+        component: log-forwarder
+    spec:
+      serviceAccountName: filebeat
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: filebeat
+          image: docker.elastic.co/beats/filebeat:8.13.0
+          args: ["--strict.perms=false"]
+          env:
+            - name: WAZUH_GRAFANA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: soc-lab-secrets
+                  key: wazuh-grafana-password
+          volumeMounts:
+            - name: wazuh-logs
+              mountPath: /var/ossec/logs
+              readOnly: true
+            - name: config
+              mountPath: /usr/share/filebeat/filebeat.yml
+              subPath: filebeat.yml
+              readOnly: true
+            - name: certs
+              mountPath: /etc/filebeat/certs
+              readOnly: true
+            - name: data
+              mountPath: /usr/share/filebeat/data
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "512Mi"
+              cpu: "250m"
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+      volumes:
+        - name: wazuh-logs
+          persistentVolumeClaim:
+            claimName: wazuh-manager-logs
+        - name: config
+          configMap:
+            name: filebeat-config
+            items:
+              - key: filebeat.yml
+                path: filebeat.yml
+        - name: certs
+          secret:
+            secretName: wazuh-certs
+            defaultMode: 0400
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: filebeat
+  namespace: soc-lab
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: filebeat
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "pods", "nodes"]
+    verbs: ["get", "watch", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: filebeat
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: filebeat
+subjects:
+  - kind: ServiceAccount
+    name: filebeat
+    namespace: soc-lab

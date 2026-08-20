@@ -1,0 +1,60 @@
+filebeat.inputs:
+  - type: log
+    enabled: true
+    paths:
+      - /var/ossec/logs/alerts/alerts.json
+    json.keys_under_root: true
+    json.add_error_key: true
+    json.overwrite_keys: true
+    fields:
+      service: wazuh
+    fields_under_root: true
+    scan_frequency: 10s
+    tail_files: true
+    ignore_older: 72h
+    close_inactive: 5m
+    close_removed: true
+    close_renamed: true
+    close_eof: false
+
+filebeat.config.modules:
+  path: ${path.config}/modules.d/*.yml
+  reload.enabled: false
+
+processors:
+  - add_host_metadata:
+      when.not.contains.tags: forwarded
+  - add_cloud_metadata: ~
+  - add_docker_metadata: ~
+  - add_kubernetes_metadata: ~
+
+output.elasticsearch:
+  hosts: ["https://wazuh-indexer:9200"]
+  username: "grafana_reader"
+  password: "${WAZUH_GRAFANA_PASSWORD}"
+  ssl.enabled: true
+  ssl.certificate_authorities: ["/etc/filebeat/certs/root-ca.pem"]
+  ssl.verification_mode: "full"
+  index: "wazuh-alerts-4.x-%{+yyyy.MM.dd}"
+  bulk_max_size: 1000
+  compression_level: 3
+  worker: 2
+
+setup.template.settings:
+  index.number_of_shards: 1
+  index.number_of_replicas: 0
+
+setup.ilm.enabled: false
+
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat
+  keepfiles: 7
+  permissions: 0644
+
+queue.mem:
+  events: 4096
+  flush.min_events: 512
+  flush.timeout: 5s

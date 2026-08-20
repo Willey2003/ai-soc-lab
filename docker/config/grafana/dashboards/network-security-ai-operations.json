@@ -1,0 +1,878 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": "Wazuh OpenSearch",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "added": {
+                  "color": "green",
+                  "index": 0
+                },
+                "deleted": {
+                  "color": "red",
+                  "index": 2
+                },
+                "modified": {
+                  "color": "yellow",
+                  "index": 1
+                },
+                "unknown": {
+                  "color": "gray",
+                  "index": 3
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 30
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "datasource": "Wazuh OpenSearch",
+          "query": "rule.groups:syscheck",
+          "queryType": "lucene",
+          "format": "time_series",
+          "metricColumn": "",
+          "bucketAggs": [
+            {
+              "type": "date_histogram",
+              "field": "@timestamp",
+              "interval": "auto"
+            }
+          ],
+          "metrics": [
+            {
+              "type": "count"
+            }
+          ],
+          "refId": "A"
+        }
+      ],
+      "title": "FIM Events (24h)",
+      "type": "stat"
+    },
+    {
+      "datasource": "NetAlertX Infinity",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "datasource": "NetAlertX Infinity",
+          "format": "json",
+          "parser": "jq",
+          "rootSelector": "[.devices | map(select(((.devStatus // \"\") | ascii_downcase) == \"online\" or ((.devStatus // \"\") | ascii_downcase) == \"on-line\")) | {online_devices:length}][]",
+          "url": "/devices",
+          "refId": "A"
+        }
+      ],
+      "title": "Online Devices",
+      "type": "stat"
+    },
+    {
+      "datasource": "Airia Wazuh Forwarder",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "datasource": "Airia Wazuh Forwarder",
+          "format": "json",
+          "parser": "jq",
+          "rootSelector": ".",
+          "url": "/api/latest",
+          "refId": "A"
+        }
+      ],
+      "title": "Latest Airia Risk Score",
+      "type": "gauge"
+    },
+    {
+      "datasource": "Airia Wazuh Forwarder",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "datasource": "Airia Wazuh Forwarder",
+          "format": "json",
+          "parser": "jq",
+          "rootSelector": ".",
+          "url": "/api/latest",
+          "refId": "A"
+        }
+      ],
+      "title": "Latest Alert Name",
+      "type": "stat"
+    },
+    {
+      "datasource": "Wazuh OpenSearch",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Event"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Event"
+              },
+              {
+                "id": "cellOptions",
+                "value": {
+                  "type": "colored-text",
+                  "mappings": [
+                    {
+                      "type": "value",
+                      "options": {
+                        "added": {
+                          "color": "green",
+                          "index": 0
+                        },
+                        "deleted": {
+                          "color": "red",
+                          "index": 2
+                        },
+                        "modified": {
+                          "color": "yellow",
+                          "index": 1
+                        },
+                        "unknown": {
+                          "color": "gray",
+                          "index": 3
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 24,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "id": 5,
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Time",
+            "desc": true
+          }
+        ]
+      },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "datasource": "Wazuh OpenSearch",
+          "query": "rule.groups:syscheck",
+          "queryType": "lucene",
+          "format": "raw",
+          "size": 200,
+          "sort": [
+            {
+              "field": "@timestamp",
+              "order": "desc"
+            }
+          ],
+          "refId": "A"
+        }
+      ],
+      "title": "File Integrity Events",
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": {
+            "fields": {}
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "@timestamp": "Time",
+              "agent.name": "Agent",
+              "rule.description": "Alert",
+              "rule.level": "Level",
+              "syscheck.event": "Event",
+              "syscheck.path": "File",
+              "syscheck.sha256_after": "SHA-256 After"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": "NetAlertX Infinity",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "online": {
+                  "color": "green",
+                  "index": 0
+                },
+                "on-line": {
+                  "color": "green",
+                  "index": 1
+                },
+                "offline": {
+                  "color": "red",
+                  "index": 2
+                },
+                "off-line": {
+                  "color": "red",
+                  "index": 3
+                },
+                "down": {
+                  "color": "red",
+                  "index": 4
+                },
+                "new": {
+                  "color": "blue",
+                  "index": 5
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 16,
+        "w": 16,
+        "x": 0,
+        "y": 28
+      },
+      "id": 6,
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "devName",
+            "desc": false
+          }
+        ]
+      },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "datasource": "NetAlertX Infinity",
+          "format": "json",
+          "parser": "jq",
+          "rootSelector": ".devices[]",
+          "url": "/devices",
+          "refId": "A"
+        }
+      ],
+      "title": "Device Inventory",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "devName": "Name",
+              "devIP": "IP",
+              "devMAC": "MAC",
+              "devType": "Type",
+              "devStatus": "Status"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": "NetAlertX Infinity",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "online": {
+                  "color": "green",
+                  "index": 0
+                },
+                "on-line": {
+                  "color": "green",
+                  "index": 1
+                },
+                "offline": {
+                  "color": "red",
+                  "index": 2
+                },
+                "off-line": {
+                  "color": "red",
+                  "index": 3
+                },
+                "down": {
+                  "color": "red",
+                  "index": 4
+                },
+                "new": {
+                  "color": "blue",
+                  "index": 5
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 28
+      },
+      "id": 7,
+      "options": {
+        "displayLabels": [
+          "name",
+          "value"
+        ],
+        "label": "Status",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "count"
+          ],
+          "fields": "devStatus"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "datasource": "NetAlertX Infinity",
+          "format": "json",
+          "parser": "jq",
+          "rootSelector": ".devices[]",
+          "url": "/devices",
+          "refId": "A"
+        }
+      ],
+      "title": "Device Status",
+      "type": "piechart"
+    },
+    {
+      "datasource": "Airia Wazuh Forwarder",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "wrap": true
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "Critical": {
+                  "color": "red",
+                  "index": 0
+                },
+                "High": {
+                  "color": "orange",
+                  "index": 1
+                },
+                "Medium": {
+                  "color": "yellow",
+                  "index": 2
+                },
+                "Guarded": {
+                  "color": "blue",
+                  "index": 3
+                },
+                "Low": {
+                  "color": "green",
+                  "index": 4
+                },
+                "None": {
+                  "color": "gray",
+                  "index": 5
+                }
+              }
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "risk_score"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "summary"
+            },
+            "properties": [
+              {
+                "id": "custom.wrap",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "recommended_actions_text"
+            },
+            "properties": [
+              {
+                "id": "custom.wrap",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "file_path"
+            },
+            "properties": [
+              {
+                "id": "custom.wrap",
+                "value": true
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 24,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      },
+      "id": 8,
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "analysis_timestamp",
+            "desc": true
+          }
+        ]
+      },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "datasource": "Airia Wazuh Forwarder",
+          "format": "json",
+          "parser": "jq",
+          "rootSelector": ".analyses[]",
+          "url": "/api/analyses?limit=100",
+          "refId": "A"
+        }
+      ],
+      "title": "Airia Analysis History",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "analysis_timestamp": "Time",
+              "alert_name": "Alert",
+              "risk_score": "Risk",
+              "severity": "Severity",
+              "summary": "Summary",
+              "file_event": "Event",
+              "file_path": "File",
+              "agent_name": "Agent"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": "Airia Wazuh Forwarder",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "wrap": true
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "summary"
+            },
+            "properties": [
+              {
+                "id": "custom.wrap",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "recommended_actions_text"
+            },
+            "properties": [
+              {
+                "id": "custom.wrap",
+                "value": true
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 24,
+        "w": 24,
+        "x": 0,
+        "y": 68
+      },
+      "id": 9,
+      "options": {
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "analysis_timestamp",
+            "desc": true
+          }
+        ]
+      },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "datasource": "Airia Wazuh Forwarder",
+          "format": "json",
+          "parser": "jq",
+          "rootSelector": ".",
+          "url": "/api/latest",
+          "refId": "A"
+        }
+      ],
+      "title": "Latest AI Summary",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "alert_name": "Alert",
+              "severity": "Severity",
+              "risk_score": "Risk",
+              "summary": "Summary",
+              "recommended_actions_text": "Recommended Actions",
+              "file_event": "Event",
+              "file_path": "File",
+              "analysis_timestamp": "Time"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": [
+    "wazuh",
+    "netalertx",
+    "airia",
+    "fim",
+    "soc"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Network Security and AI Operations",
+  "uid": "network-security-ai-operations",
+  "version": 1,
+  "weekStart": ""
+}

@@ -1,0 +1,45 @@
+apiVersion: 1
+
+datasources:
+  - name: Wazuh OpenSearch
+    type: grafana-opensearch-datasource
+    access: proxy
+    url: https://wazuh-indexer:9200
+    database: wazuh-alerts-4.x-*
+    user: grafana_reader
+    secureJsonData:
+      password: ${WAZUH_GRAFANA_PASSWORD}
+    jsonData:
+      version: "2.11.0"
+      tlsSkipVerify: false
+      tlsAuth: true
+      tlsAuthWithCACert: true
+    editable: false
+
+  - name: NetAlertX Infinity
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    url: http://netalertx:20212
+    jsonData:
+      type: json
+      method: GET
+      headers:
+        - name: Authorization
+          value: Bearer ${NETALERTX_API_TOKEN}
+      allowedHosts:
+        - "http://netalertx:20212"
+    editable: false
+
+  - name: Airia Wazuh Forwarder
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    url: http://wazuh-airia-forwarder:8010
+    jsonData:
+      type: json
+      method: GET
+      headers:
+        - name: X-API-Key
+          value: ${HELPER_API_KEY}
+      allowedHosts:
+        - "http://wazuh-airia-forwarder:8010"
+    editable: false

@@ -1,0 +1,63 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: soc-lab
+
+resources:
+  - namespace.yaml
+  - configmaps.yaml
+  - secrets.yaml
+  - deployments.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: ai-soc-lab
+  app.kubernetes.io/managed-by: kustomize
+
+configMapGenerator:
+  - name: wazuh-indexer-config
+    behavior: merge
+  - name: wazuh-manager-config
+    behavior: merge
+  - name: netalertx-config
+    behavior: merge
+  - name: grafana-datasources
+    behavior: merge
+  - name: grafana-dashboards
+    behavior: merge
+  - name: grafana-dashboard-network-security
+    behavior: merge
+  - name: filebeat-config
+    behavior: merge
+  - name: wazuh-dashboard-config
+    behavior: merge
+
+secretGenerator:
+  - name: soc-lab-secrets
+    behavior: merge
+    envs:
+      - .env.secrets
+  - name: wazuh-certs
+    behavior: merge
+    files:
+      - certs/root-ca.pem
+      - certs/indexer.pem
+      - certs/indexer.key
+      - certs/dashboard.pem
+      - certs/dashboard.key
+      - certs/sslmanager.cert
+      - certs/sslmanager.key
+      - certs/cluster.key
+
+images:
+  - name: wazuh/wazuh-indexer
+    newTag: 4.14.0
+  - name: wazuh/wazuh-manager
+    newTag: 4.14.0
+  - name: wazuh/wazuh-dashboard
+    newTag: 4.14.0
+  - name: ghcr.io/netalertx/netalertx
+    newTag: latest
+  - name: grafana/grafana
+    newTag: 11.0.0
+  - name: docker.elastic.co/beats/filebeat
+    newTag: 8.13.0
