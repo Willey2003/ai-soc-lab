@@ -1,15 +1,25 @@
-.env
+```
+# Kubernetes related
+*.kubeconfig
+.kube/
+
+# Temporary and backup files
+*.tmp
+*.bak
+*.backup
+*~
+.swp
+.swo
+
+# Logs
 *.log
-backups/
-__pycache__/
-*.pyc
-.pytest_cache/
-.coverage
-htmlcov/
-.venv/
-venv/
+
+# Environment files
+.env
+.env.local
+*.env.*
+
+# OS generated files
 .DS_Store
-*.swp
-*.swo
-.vscode/
-.idea/
+Thumbs.db
+```
