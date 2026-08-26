@@ -445,7 +445,7 @@ spec:
             - name: LISTEN_ADDR
               value: "0.0.0.0"
             - name: APP_CONF_OVERRIDE
-              value: '{"GRAPHQL_PORT":"20212","SCAN_SUBNETS":"['"'"'192.168.0.0/24'"'"']"}'
+              value: '{"GRAPHQL_PORT":"20212","SCAN_SUBNETS":["192.168.0.0/24"]}'
           resources:
             requests:
               memory: "512Mi"
