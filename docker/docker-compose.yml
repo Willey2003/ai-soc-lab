@@ -164,6 +164,79 @@ services:
       - /tmp
       - /var/lib/wazuh-airia-forwarder
 
+  # --- AI triage (local Ollama by default, free hosted API as a switch) ---
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    networks:
+      - soc-lab
+    # Uncomment to use an NVIDIA GPU (needs nvidia-container-toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: ollama-pull
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-llama3.2:3b}"]
+    networks:
+      - soc-lab
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+  soc-triage:
+    build:
+      context: ../triage
+    container_name: soc-triage
+    restart: unless-stopped
+    ports:
+      - "8020:8020"
+    environment:
+      - WAZUH_ALERTS_FILE=/var/ossec/logs/alerts/alerts.json
+      - DB_PATH=/var/lib/soc-triage/triage.db
+      - MIN_RULE_LEVEL=${TRIAGE_MIN_RULE_LEVEL:-7}
+      - LLM_PROVIDERS=${LLM_PROVIDERS:-ollama,heuristic}
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
+      - HOSTED_API_URL=${HOSTED_API_URL:-https://api.groq.com/openai/v1/chat/completions}
+      - HOSTED_MODEL=${HOSTED_MODEL:-llama-3.1-8b-instant}
+      - HOSTED_API_KEY=${HOSTED_API_KEY:-}
+      - REDACT_FOR_HOSTED=${REDACT_FOR_HOSTED:-true}
+      - TRIAGE_API_KEY=${TRIAGE_API_KEY}
+      - LOG_LEVEL=INFO
+    volumes:
+      - wazuh-manager-logs:/var/ossec/logs:ro
+      - triage-data:/var/lib/soc-triage
+    networks:
+      - soc-lab
+    depends_on:
+      wazuh-manager:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
   grafana:
     image: grafana/grafana:11.0.0
     container_name: grafana
@@ -188,6 +261,7 @@ services:
       - wazuh-indexer
       - netalertx
       - wazuh-airia-forwarder
+      - soc-triage
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
       interval: 30s
@@ -221,6 +295,8 @@ volumes:
   netalertx-data:
   forwarder-data:
   grafana-data:
+  ollama-models:
+  triage-data:
   filebeat-data:
 
 networks:
