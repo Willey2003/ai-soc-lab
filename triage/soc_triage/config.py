@@ -23,7 +23,8 @@ class Settings:
             os.getenv("WAZUH_ALERTS_FILE", "/var/ossec/logs/alerts/alerts.json")
         )
     )
-    # "file" follows alerts.json; "indexer" polls the Wazuh indexer over HTTPS
+    # file: follow alerts.json | indexer: poll the Wazuh indexer over HTTPS
+    # simulate: replay bundled sample alerts (no Wazuh needed) | none: API only
     alert_source: str = field(default_factory=lambda: os.getenv("ALERT_SOURCE", "file").strip().lower())
     indexer_url: str = field(
         default_factory=lambda: os.getenv("INDEXER_URL", "https://wazuh-indexer:9200")
@@ -39,6 +40,9 @@ class Settings:
             os.getenv("INDEXER_CA_FILE")
             or _bool("INDEXER_VERIFY_TLS", True)
         )
+    )
+    simulate_every: float = field(
+        default_factory=lambda: float(os.getenv("SIMULATE_EVERY_SECONDS", "60"))
     )
     tail_enabled: bool = field(default_factory=lambda: _bool("TAIL_ENABLED", True))
     start_at_end: bool = field(default_factory=lambda: _bool("START_AT_END", True))

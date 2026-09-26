@@ -178,3 +178,39 @@ class IndexerSource:
                 self.cursor_store.set_meta("indexer_cursor", json.dumps(self.cursor))
             if len(hits) < self.batch:
                 return
+
+
+SAMPLES_FILE = Path(__file__).resolve().parents[1] / "samples" / "wazuh_alerts.jsonl"
+
+
+class SimulatedSource:
+    """Replays bundled sample alerts with fresh timestamps, one every `every` seconds.
+
+    For clusters without Wazuh: the queue fills with realistic alerts so the AI
+    triage path (and the UI) can be exercised end to end. Real alerts can still
+    be pushed in at any time with POST /api/triage.
+    """
+
+    def __init__(self, every: float, samples: Path = SAMPLES_FILE, clock: Any = None) -> None:
+        import time
+        from datetime import datetime, timezone
+
+        self._now = clock or time.monotonic
+        self._utc = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+0000"
+        self.every = every
+        self.samples = [json.loads(l) for l in samples.read_text().splitlines() if l.strip()]
+        self._next_at = self._now()
+        self._i = 0
+        self._seq = 0
+
+    def read_new(self) -> Iterator[dict[str, Any]]:
+        if not self.samples or self._now() < self._next_at:
+            return
+        self._next_at = self._now() + self.every
+        alert = json.loads(json.dumps(self.samples[self._i % len(self.samples)]))
+        self._i += 1
+        self._seq += 1
+        alert["timestamp"] = self._utc()
+        alert["id"] = f"sim.{self._seq}.{alert.get('id', '')}"
+        alert.setdefault("rule", {})["groups"] = list(alert.get("rule", {}).get("groups", [])) + ["simulated"]
+        yield alert

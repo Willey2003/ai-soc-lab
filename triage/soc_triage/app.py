@@ -14,7 +14,7 @@ from .config import Settings
 from .llm import build_providers
 from .store import Store
 from .triage import VERDICTS, TriageEngine
-from .wazuh import AlertTailer, IndexerSource, normalize
+from .wazuh import AlertTailer, IndexerSource, SimulatedSource, normalize
 
 LOG = logging.getLogger(__name__)
 STATUSES = {"open", "acknowledged", "escalated", "closed"}
@@ -43,8 +43,14 @@ class Service:
         )
         return result
 
-    def make_source(self) -> AlertTailer | IndexerSource:
+    def make_source(self) -> AlertTailer | IndexerSource | SimulatedSource | None:
         s = self.settings
+        if s.alert_source == "none":
+            LOG.info("no alert source; send alerts with POST /api/triage")
+            return None
+        if s.alert_source == "simulate":
+            LOG.info("simulating one sample Wazuh alert every %ss", s.simulate_every)
+            return SimulatedSource(s.simulate_every)
         if s.alert_source == "indexer":
             if s.indexer_verify is False:
                 LOG.warning("INDEXER_VERIFY_TLS=false: indexer certificate is not checked")
@@ -54,12 +60,16 @@ class Service:
                 s.indexer_verify, s.min_rule_level, s.start_at_end, cursor_store=self.store,
             )
         if s.alert_source != "file":
-            raise ValueError(f"ALERT_SOURCE must be 'file' or 'indexer', not {s.alert_source!r}")
+            raise ValueError(
+                f"ALERT_SOURCE must be file, indexer, simulate or none, not {s.alert_source!r}"
+            )
         LOG.info("watching %s (min level %d)", s.alerts_file, s.min_rule_level)
         return AlertTailer(s.alerts_file, s.start_at_end)
 
     def run_tailer(self) -> None:
         tailer = self.make_source()
+        if tailer is None:
+            return
         while not self.stop.is_set():
             try:
                 for raw in tailer.read_new():

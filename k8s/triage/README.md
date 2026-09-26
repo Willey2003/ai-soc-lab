@@ -8,9 +8,13 @@ changed or deleted:
   refuses to apply if any object is outside `soc-triage` (no cluster-wide
   RBAC, CRDs or objects in `soc-lab`). It also refuses to touch a `soc-triage`
   namespace it didn't create.
-- **Read-only link to Wazuh.** Alerts are pulled from the Wazuh indexer over
-  HTTPS with a read-only user (the lab's `grafana_reader`), so the Wazuh
-  manager's volumes and config stay as they are.
+- **No Wazuh required.** By default (`ALERT_SOURCE=simulate`) the service
+  replays realistic sample Wazuh alerts (SSH brute force, Mimikatz, reverse
+  shell, `/etc/passwd` change...) with fresh timestamps, one a minute, so the AI
+  triage runs end to end on any cluster. If you have a Wazuh indexer, switch to
+  `ALERT_SOURCE=indexer` and alerts are pulled from it over HTTPS with a
+  read-only user; preflight stops you if that indexer isn't there. Real alerts
+  can also be pushed in any time with `POST /api/triage`.
 - **Can't starve other workloads.** A ResourceQuota caps the namespace at
   3 CPU / 8 GiB requested and 6 CPU / 12 GiB limit, 40 GiB of storage, and no
   NodePorts or LoadBalancers. Both Deployments use `Recreate` so a rollout never
@@ -23,11 +27,12 @@ changed or deleted:
   token). Ollama's image needs root, so the namespace enforces `baseline`.
 
 ```
- soc-lab (existing, untouched)             soc-triage (new)
- ┌───────────────────────┐   HTTPS, read   ┌──────────────────────────┐    ┌──────────┐
- │ wazuh-indexer :9200    │◀───────────────│ soc-triage :8020          │───▶│ ollama    │
- └───────────────────────┘   only          │ SQLite PVC 1Gi            │    │ PVC 20Gi  │
-                                           └──────────────────────────┘    └──────────┘
+ Wazuh indexer (optional,                  soc-triage (new)
+ any namespace or host)                    ┌──────────────────────────┐    ┌──────────┐
+ ┌───────────────────────┐   HTTPS, read   │ soc-triage :8020          │───▶│ ollama    │
+ │ wazuh-indexer :9200    │◀ ─ ─ ─ ─ ─ ─ ─ │ simulate | indexer | API  │    │ PVC 20Gi  │
+ └───────────────────────┘   only          │ SQLite PVC 1Gi            │    └──────────┘
+                                           └──────────────────────────┘
                                                       │ optional, redacted
                                                       ▼
                                                 Groq (free tier)
@@ -39,9 +44,13 @@ Needs `kubectl` pointed at the lab cluster, a default StorageClass, and about
 4 GiB of free memory for Ollama.
 
 ```bash
-# 1. Secrets (git-ignored). TRIAGE_API_KEY is generated for you.
+# 0. Get the code (the scripts live in the repo)
+git clone -b feat/ai-triage-service https://github.com/Willey2003/ai-soc-lab.git
+cd ai-soc-lab
+
+# 1. Secrets (git-ignored). TRIAGE_API_KEY is generated for you; nothing else is
+#    needed for the default simulate mode.
 cp k8s/triage/secrets.env.example k8s/triage/secrets.env
-$EDITOR k8s/triage/secrets.env          # INDEXER_PASSWORD (+ HOSTED_API_KEY if using Groq)
 
 # 2. See exactly what will be created; changes nothing
 ./scripts/k8s-triage.sh preflight
@@ -54,10 +63,11 @@ $EDITOR k8s/triage/secrets.env          # INDEXER_PASSWORD (+ HOSTED_API_KEY if 
 ./scripts/k8s-triage.sh open            # http://localhost:8020/?key=...
 ```
 
-Settings live in `k8s/triage/triage.env`: the indexer URL (defaults to
-`wazuh-indexer.soc-lab.svc.cluster.local:9200`, change it if your Wazuh runs
-elsewhere, e.g. in Docker on another host), AI backends, model, minimum rule
-level. Edit and re-run `up`; the ConfigMap name changes with its content so the
+Settings live in `k8s/triage/triage.env`: the alert source (`simulate`,
+`indexer` or `none`), the indexer URL if you use one (in-cluster
+`https://<svc>.<namespace>.svc.cluster.local:9200` or any host the pods can
+reach, e.g. Wazuh in Docker on another machine), AI backends, model, minimum
+rule level. Edit and re-run `up`; the ConfigMap name changes with its content so the
 pod restarts with the new values.
 
 ### Container image

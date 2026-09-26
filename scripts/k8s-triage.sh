@@ -35,8 +35,29 @@ ensure_secrets() {
         sed -i.bak "s/^TRIAGE_API_KEY=.*/TRIAGE_API_KEY=${key}/" "${SECRETS}" && rm -f "${SECRETS}.bak"
         log "Generated TRIAGE_API_KEY in ${SECRETS}"
     fi
+}
+
+setting() { grep -E "^$1=" "${DIR}/triage.env" | tail -1 | cut -d= -f2- || true; }
+
+# With ALERT_SOURCE=indexer, make sure the indexer actually exists before deploying.
+check_alert_source() {
+    local source url host svc ns
+    source="$(setting ALERT_SOURCE)"
+    log "Alert source: ${source:-simulate}"
+    [[ "${source}" == "indexer" ]] || return 0
     grep -qE '^INDEXER_PASSWORD=.+' "${SECRETS}" \
-        || log "WARNING: INDEXER_PASSWORD is empty in ${SECRETS}; the service will run but won't see alerts"
+        || die "ALERT_SOURCE=indexer but INDEXER_PASSWORD is empty in ${SECRETS}"
+    url="$(setting INDEXER_URL)"
+    host="${url#*://}"; host="${host%%[:/]*}"
+    if [[ "${host}" == *.svc || "${host}" == *.svc.cluster.local ]]; then
+        svc="${host%%.*}"; ns="${host#*.}"; ns="${ns%%.*}"
+        ${KUBECTL} -n "${ns}" get service "${svc}" >/dev/null 2>&1 || die "no Wazuh indexer at ${url}:
+    service ${svc} not found in namespace ${ns}.
+    Fix INDEXER_URL in k8s/triage/triage.env, or set ALERT_SOURCE=simulate to run without Wazuh."
+        log "Found Wazuh indexer service ${ns}/${svc}"
+    else
+        log "Indexer is outside the cluster (${host}); make sure pods can reach it"
+    fi
 }
 
 render() {
@@ -80,6 +101,7 @@ cmd_preflight() {
     log "Cluster context: ${ctx}"
     ${KUBECTL} version >/dev/null 2>&1 || die "cannot reach the cluster with '${KUBECTL}'"
     check_namespace_owner
+    check_alert_source
     local manifest; manifest="$(mktemp)"
     render > "${manifest}"
     guard "${manifest}"
@@ -87,9 +109,6 @@ cmd_preflight() {
     grep -E '^kind: ' "${manifest}" | sort | uniq -c
     ${KUBECTL} get storageclass -o jsonpath='{range .items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")]}{.metadata.name}{"\n"}{end}' 2>/dev/null \
         | grep -q . || log "WARNING: no default StorageClass; the two PVCs will stay Pending until you add one"
-    if ${KUBECTL} get namespace soc-lab >/dev/null 2>&1; then
-        log "Found existing namespace soc-lab (read over the network only, never modified)"
-    fi
     if ${KUBECTL} get namespace "${NS}" >/dev/null 2>&1; then
         log "Server-side dry run (the API server validates every object, nothing is saved):"
         ${KUBECTL} apply --dry-run=server -f "${manifest}" | sed 's/^/    /'
@@ -105,6 +124,7 @@ cmd_preflight() {
 cmd_up() {
     ensure_secrets
     check_namespace_owner
+    check_alert_source
     local manifest; manifest="$(mktemp)"
     render > "${manifest}"
     guard "${manifest}"

@@ -277,3 +277,32 @@ def test_unknown_alert_source_is_rejected(monkeypatch, tmp_path):
     s = make_settings(monkeypatch, tmp_path, LLM_PROVIDERS="heuristic", ALERT_SOURCE="splunk")
     with pytest.raises(ValueError):
         Service(s).make_source()
+
+
+def test_simulated_source_emits_fresh_alerts_on_schedule(monkeypatch, tmp_path):
+    from soc_triage.wazuh import SimulatedSource
+
+    now = [0.0]
+    src = SimulatedSource(every=30, clock=lambda: now[0])
+    first = list(src.read_new())
+    assert len(first) == 1 and "simulated" in first[0]["rule"]["groups"]
+    assert list(src.read_new()) == []  # not due yet
+    now[0] = 31
+    second = list(src.read_new())
+    assert len(second) == 1 and second[0]["id"] != first[0]["id"]
+    assert normalize(first[0])["id"] != normalize(RAW[0])["id"]  # never collides with the sample itself
+
+    # the full service triages them like any other alert
+    s = make_settings(monkeypatch, tmp_path, LLM_PROVIDERS="heuristic", ALERT_SOURCE="simulate", MIN_RULE_LEVEL="0")
+    service = Service(s, store=Store(s.db_path))
+    source = service.make_source()
+    for raw in source.read_new():
+        service.process(raw)
+    assert len(service.store.list()) == 1
+
+
+def test_source_none_means_api_only(monkeypatch, tmp_path):
+    s = make_settings(monkeypatch, tmp_path, LLM_PROVIDERS="heuristic", ALERT_SOURCE="none")
+    service = Service(s)
+    assert service.make_source() is None
+    service.run_tailer()  # returns immediately instead of looping

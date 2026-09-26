@@ -70,7 +70,8 @@ useful IOCs. Ollama always gets the full alert.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `ALERT_SOURCE` | `file` | `file` follows alerts.json; `indexer` polls the Wazuh indexer (read-only) |
+| `ALERT_SOURCE` | `file` | `file` follows alerts.json; `indexer` polls the Wazuh indexer (read-only); `simulate` replays the sample alerts with fresh timestamps (no Wazuh needed); `none` is API only |
+| `SIMULATE_EVERY_SECONDS` | `60` | pace of the simulator |
 | `WAZUH_ALERTS_FILE` | `/var/ossec/logs/alerts/alerts.json` | file to follow (rotation-safe) |
 | `INDEXER_URL` / `INDEXER_INDEX` | `https://wazuh-indexer:9200` / `wazuh-alerts-4.x-*` | indexer source |
 | `INDEXER_USER` / `INDEXER_PASSWORD` | empty | read-only indexer user, e.g. `grafana_reader` |
@@ -146,8 +147,8 @@ passwd change 65, 404 35.
 
 ## Tests
 
-`python -m pytest -q` runs 16 tests with fake Ollama and OpenAI-compatible
+`python -m pytest -q` runs 18 tests with fake Ollama and OpenAI-compatible
 servers: parsing, validation, redaction (checks internal names never reach a
 hosted call), the fallback chain, 429 cooldown, log rotation and partial lines,
-the indexer source (paging, resume after restart), and the API end to end. CI runs them plus a Docker build
+the indexer source (paging, resume after restart), the simulator, and the API end to end. CI runs them plus a Docker build
 (`.github/workflows/triage-tests.yml`).
