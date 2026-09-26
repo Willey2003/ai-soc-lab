@@ -205,3 +205,75 @@ def test_api_end_to_end(monkeypatch, tmp_path):
     assert stats["total"] == 6 and stats["analyst_reviewed"] == 1 and stats["ai_agreement_rate"] == 1.0
     page = client.get("/?key=secret").get_data(as_text=True)
     assert "Reverse shell" in page
+
+
+class FakeIndexer(BaseHTTPRequestHandler):
+    """Minimal OpenSearch _search: level filter, (timestamp, id) sort, search_after."""
+
+    docs: list = []
+    bodies: list = []
+
+    def do_POST(self):
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        type(self).bodies.append({"body": body, "auth": self.headers.get("Authorization"), "path": self.path})
+        min_level = body["query"]["bool"]["filter"][0]["range"]["rule.level"]["gte"]
+        rows = sorted(
+            ((d["timestamp"], d["id"], d) for d in self.docs if d["rule"]["level"] >= min_level),
+            key=lambda r: (r[0], r[1]),
+        )
+        after = body.get("search_after")
+        if after:
+            rows = [r for r in rows if (r[0], r[1]) > tuple(after)]
+        hits = [{"_source": d, "sort": [ts, i]} for ts, i, d in rows[: body["size"]]]
+        payload = json.dumps({"hits": {"hits": hits}}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, *args):
+        pass
+
+
+@pytest.fixture
+def fake_indexer():
+    FakeIndexer.docs, FakeIndexer.bodies = [], []
+    server = HTTPServer(("127.0.0.1", 0), FakeIndexer)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_port}"
+    server.shutdown()
+
+
+def test_indexer_source_pages_filters_and_resumes(monkeypatch, tmp_path, fake_indexer):
+    s = make_settings(
+        monkeypatch, tmp_path, LLM_PROVIDERS="heuristic", ALERT_SOURCE="indexer",
+        INDEXER_URL=fake_indexer, INDEXER_USER="reader", INDEXER_PASSWORD="pw", MIN_RULE_LEVEL="7",
+    )
+    store = Store(s.db_path)
+    service = Service(s, store=store)
+    FakeIndexer.docs = [BRUTE, MIMIKATZ, SUDO]
+    source = service.make_source()
+    source.batch = 1  # force paging
+
+    for raw in source.read_new():
+        service.process(raw)
+    assert {r["rule_id"] for r in store.list()} == {"5763", "92052"}  # sudo (level 3) filtered server-side
+    first = FakeIndexer.bodies[0]
+    assert first["path"] == "/wazuh-alerts-4.x-*/_search"
+    assert first["auth"].startswith("Basic ")
+    assert "search_after" not in first["body"]
+    assert FakeIndexer.bodies[1]["body"]["search_after"] == [BRUTE["timestamp"], BRUTE["id"]]
+
+    # a restarted service resumes from the saved cursor and only sees new alerts
+    FakeIndexer.docs.append(REVSHELL)
+    FakeIndexer.bodies = []
+    resumed = Service(s, store=store).make_source()
+    new = list(resumed.read_new())
+    assert [a["id"] for a in new] == [REVSHELL["id"]]
+    assert FakeIndexer.bodies[0]["body"]["search_after"] == [MIMIKATZ["timestamp"], MIMIKATZ["id"]]
+
+
+def test_unknown_alert_source_is_rejected(monkeypatch, tmp_path):
+    s = make_settings(monkeypatch, tmp_path, LLM_PROVIDERS="heuristic", ALERT_SOURCE="splunk")
+    with pytest.raises(ValueError):
+        Service(s).make_source()

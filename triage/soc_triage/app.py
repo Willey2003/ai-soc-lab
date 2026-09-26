@@ -14,7 +14,7 @@ from .config import Settings
 from .llm import build_providers
 from .store import Store
 from .triage import VERDICTS, TriageEngine
-from .wazuh import AlertTailer, normalize
+from .wazuh import AlertTailer, IndexerSource, normalize
 
 LOG = logging.getLogger(__name__)
 STATUSES = {"open", "acknowledged", "escalated", "closed"}
@@ -43,9 +43,23 @@ class Service:
         )
         return result
 
+    def make_source(self) -> AlertTailer | IndexerSource:
+        s = self.settings
+        if s.alert_source == "indexer":
+            if s.indexer_verify is False:
+                LOG.warning("INDEXER_VERIFY_TLS=false: indexer certificate is not checked")
+            LOG.info("polling %s/%s (min level %d)", s.indexer_url, s.indexer_index, s.min_rule_level)
+            return IndexerSource(
+                s.indexer_url, s.indexer_index, s.indexer_user, s.indexer_password,
+                s.indexer_verify, s.min_rule_level, s.start_at_end, cursor_store=self.store,
+            )
+        if s.alert_source != "file":
+            raise ValueError(f"ALERT_SOURCE must be 'file' or 'indexer', not {s.alert_source!r}")
+        LOG.info("watching %s (min level %d)", s.alerts_file, s.min_rule_level)
+        return AlertTailer(s.alerts_file, s.start_at_end)
+
     def run_tailer(self) -> None:
-        tailer = AlertTailer(self.settings.alerts_file, self.settings.start_at_end)
-        LOG.info("watching %s (min level %d)", self.settings.alerts_file, self.settings.min_rule_level)
+        tailer = self.make_source()
         while not self.stop.is_set():
             try:
                 for raw in tailer.read_new():
@@ -73,6 +87,7 @@ def create_app(service: Service) -> Flask:
     def health():
         return jsonify(
             status="ok" if not service.last_error else "degraded",
+            source=settings.alert_source,
             providers=[p.name for p in service.engine.providers],
             last_error=service.last_error,
         )

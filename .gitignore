@@ -13,3 +13,6 @@ venv/
 *.swo
 .vscode/
 .idea/
+
+# Kubernetes triage secrets
+k8s/triage/secrets.env

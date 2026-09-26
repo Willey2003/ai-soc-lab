@@ -23,6 +23,23 @@ class Settings:
             os.getenv("WAZUH_ALERTS_FILE", "/var/ossec/logs/alerts/alerts.json")
         )
     )
+    # "file" follows alerts.json; "indexer" polls the Wazuh indexer over HTTPS
+    alert_source: str = field(default_factory=lambda: os.getenv("ALERT_SOURCE", "file").strip().lower())
+    indexer_url: str = field(
+        default_factory=lambda: os.getenv("INDEXER_URL", "https://wazuh-indexer:9200")
+    )
+    indexer_index: str = field(
+        default_factory=lambda: os.getenv("INDEXER_INDEX", "wazuh-alerts-4.x-*")
+    )
+    indexer_user: str = field(default_factory=lambda: os.getenv("INDEXER_USER", ""))
+    indexer_password: str = field(default_factory=lambda: os.getenv("INDEXER_PASSWORD", ""))
+    # true/false, or a path to the indexer's CA certificate
+    indexer_verify: bool | str = field(
+        default_factory=lambda: (
+            os.getenv("INDEXER_CA_FILE")
+            or _bool("INDEXER_VERIFY_TLS", True)
+        )
+    )
     tail_enabled: bool = field(default_factory=lambda: _bool("TAIL_ENABLED", True))
     start_at_end: bool = field(default_factory=lambda: _bool("START_AT_END", True))
     poll_seconds: float = field(default_factory=lambda: float(os.getenv("POLL_SECONDS", "2")))

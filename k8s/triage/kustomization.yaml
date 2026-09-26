@@ -1,0 +1,34 @@
+# Self-contained deployment of the AI triage service.
+# Everything lands in the soc-triage namespace; nothing here references or
+# modifies the existing soc-lab resources in k8s/base.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: soc-triage
+
+resources:
+  - namespace.yaml
+  - guardrails.yaml
+  - networkpolicy.yaml
+  - ollama.yaml
+  - triage.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: soc-triage
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: false
+
+configMapGenerator:
+  - name: soc-triage-config
+    envs:
+      - triage.env
+
+secretGenerator:
+  - name: soc-triage-secrets
+    envs:
+      - secrets.env
+
+images:
+  - name: ghcr.io/willey2003/soc-triage
+    newTag: latest

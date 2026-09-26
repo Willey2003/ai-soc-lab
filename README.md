@@ -136,6 +136,18 @@ kubectl apply -k k8s/overlays/dev
 kubectl apply -k k8s/overlays/prod
 ```
 
+### AI triage only, in its own namespace
+
+To add the AI triage service to an existing cluster without touching anything
+already running there (own `soc-triage` namespace, quota, network policies,
+read-only link to the Wazuh indexer):
+
+```bash
+./scripts/k8s-triage.sh preflight && ./scripts/k8s-triage.sh up
+```
+
+See [k8s/triage/README.md](k8s/triage/README.md).
+
 ### Required Secrets
 ```bash
 kubectl create secret generic soc-lab-secrets -n soc-lab \

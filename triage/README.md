@@ -70,7 +70,12 @@ useful IOCs. Ollama always gets the full alert.
 
 | Variable | Default | Meaning |
 |---|---|---|
+| `ALERT_SOURCE` | `file` | `file` follows alerts.json; `indexer` polls the Wazuh indexer (read-only) |
 | `WAZUH_ALERTS_FILE` | `/var/ossec/logs/alerts/alerts.json` | file to follow (rotation-safe) |
+| `INDEXER_URL` / `INDEXER_INDEX` | `https://wazuh-indexer:9200` / `wazuh-alerts-4.x-*` | indexer source |
+| `INDEXER_USER` / `INDEXER_PASSWORD` | empty | read-only indexer user, e.g. `grafana_reader` |
+| `INDEXER_VERIFY_TLS` / `INDEXER_CA_FILE` | `true` / empty | TLS checking for the indexer |
+| `POLL_SECONDS` | `2` | how often to check for new alerts |
 | `MIN_RULE_LEVEL` | `7` | skip alerts below this Wazuh level |
 | `START_AT_END` | `true` | ignore history on first start |
 | `LLM_PROVIDERS` | `ollama,heuristic` | backend chain |
@@ -128,6 +133,9 @@ python -m pytest -q
 LLM_PROVIDERS=heuristic DB_PATH=./triage.db python -m soc_triage replay samples/wazuh_alerts.jsonl
 ```
 
+On Kubernetes, see [k8s/triage/README.md](../k8s/triage/README.md) for an
+isolated deployment in its own namespace.
+
 ## Sample alerts
 
 `samples/wazuh_alerts.jsonl` covers SSH brute force from a Tor exit, Mimikatz
@@ -138,8 +146,8 @@ passwd change 65, 404 35.
 
 ## Tests
 
-`python -m pytest -q` runs 14 tests with fake Ollama and OpenAI-compatible
+`python -m pytest -q` runs 16 tests with fake Ollama and OpenAI-compatible
 servers: parsing, validation, redaction (checks internal names never reach a
 hosted call), the fallback chain, 429 cooldown, log rotation and partial lines,
-and the API end to end. CI runs them plus a Docker build
+the indexer source (paging, resume after restart), and the API end to end. CI runs them plus a Docker build
 (`.github/workflows/triage-tests.yml`).

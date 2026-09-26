@@ -112,3 +112,69 @@ class AlertTailer:
                 yield json.loads(line)
             except json.JSONDecodeError:
                 LOG.warning("skipping malformed alert line (%d bytes)", len(line))
+
+
+class IndexerSource:
+    """Poll the Wazuh indexer (OpenSearch) for new alerts, read-only.
+
+    Useful when the triage service can't share a disk with the Wazuh manager,
+    e.g. running in its own Kubernetes namespace. Uses `search_after` on
+    (timestamp, id) so nothing is skipped or repeated between polls, and keeps
+    that cursor in the store so a restart resumes where it left off.
+    """
+
+    def __init__(
+        self,
+        url: str,
+        index: str,
+        user: str,
+        password: str,
+        verify: bool | str,
+        min_level: int,
+        start_at_end: bool,
+        cursor_store: Any = None,
+        batch: int = 200,
+        timeout: float = 30,
+    ) -> None:
+        import requests
+
+        self.search_url = f"{url.rstrip('/')}/{index}/_search"
+        self.http = requests.Session()
+        if user:
+            self.http.auth = (user, password)
+        self.http.verify = verify
+        self.min_level = min_level
+        self.batch = batch
+        self.timeout = timeout
+        self.cursor_store = cursor_store
+        saved = cursor_store.get_meta("indexer_cursor") if cursor_store else None
+        self.cursor: list[Any] | None = json.loads(saved) if saved else None
+        self.lookback = "now" if start_at_end else "now-24h"
+
+    def _query(self) -> dict[str, Any]:
+        filters: list[dict[str, Any]] = [{"range": {"rule.level": {"gte": self.min_level}}}]
+        if self.cursor is None:
+            filters.append({"range": {"timestamp": {"gte": self.lookback}}})
+        body: dict[str, Any] = {
+            "size": self.batch,
+            "sort": [{"timestamp": "asc"}, {"id": "asc"}],
+            "query": {"bool": {"filter": filters}},
+        }
+        if self.cursor is not None:
+            body["search_after"] = self.cursor
+        return body
+
+    def read_new(self) -> Iterator[dict[str, Any]]:
+        while True:
+            resp = self.http.post(self.search_url, json=self._query(), timeout=self.timeout)
+            resp.raise_for_status()
+            hits = resp.json().get("hits", {}).get("hits", [])
+            if not hits:
+                return
+            for hit in hits:
+                yield hit.get("_source", {})
+                self.cursor = hit.get("sort")
+            if self.cursor_store and self.cursor is not None:
+                self.cursor_store.set_meta("indexer_cursor", json.dumps(self.cursor))
+            if len(hits) < self.batch:
+                return

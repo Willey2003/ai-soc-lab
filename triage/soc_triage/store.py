@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS triage (
 );
 CREATE INDEX IF NOT EXISTS idx_triage_score ON triage(score DESC);
 CREATE INDEX IF NOT EXISTS idx_triage_time ON triage(triaged_at DESC);
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 """
 
 SUMMARY_COLUMNS = (
@@ -48,6 +49,15 @@ class Store:
         self._lock = threading.Lock()
         with self._lock:
             self._db.executescript(SCHEMA)
+
+    def get_meta(self, key: str) -> str | None:
+        with self._lock:
+            row = self._db.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return row[0] if row else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self._lock, self._db:
+            self._db.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value))
 
     def exists(self, alert_id: str) -> bool:
         with self._lock:
