@@ -1,13 +1,3 @@
-# Nothing outside this namespace can open connections into it.
-# (kubectl port-forward still works; it doesn't go through pod networking.)
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: default-deny-ingress
-spec:
-  podSelector: {}
-  policyTypes: ["Ingress"]
----
 # Only the triage pod may call Ollama.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

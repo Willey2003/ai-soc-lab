@@ -33,5 +33,8 @@ jobs:
           ./kubeconform -strict -summary rendered.yaml
       - name: Every object stays in the soc-triage namespace
         run: |
-          source <(sed -n '/^NS=/,/^check_namespace_owner/p' scripts/k8s-triage.sh | head -n -1)
-          guard rendered.yaml && echo "guard: all objects inside ${NS}"
+          source <(sed -n '/^guard() {/,/^}/p' scripts/k8s-triage.sh)
+          die() { echo "$*" >&2; exit 1; }
+          NS=soc-triage guard rendered.yaml && echo "guard: all objects inside soc-triage"
+      - name: Script syntax
+        run: bash -n scripts/k8s-triage.sh

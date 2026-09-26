@@ -5,9 +5,10 @@ dedicated `soc-triage` namespace. Nothing in your existing setup is created,
 changed or deleted:
 
 - **One namespace only.** `scripts/k8s-triage.sh` renders the manifests and
-  refuses to apply if any object is outside `soc-triage` (no cluster-wide
-  RBAC, CRDs or objects in `soc-lab`). It also refuses to touch a `soc-triage`
-  namespace it didn't create.
+  refuses to apply if any object is outside the target namespace (no
+  cluster-wide RBAC or CRDs). By default that's a new `soc-triage` namespace;
+  it can also share an existing one without changing what's already there
+  (see [Which namespace](#which-namespace)).
 - **No Wazuh required.** By default (`ALERT_SOURCE=simulate`) the service
   replays realistic sample Wazuh alerts (SSH brute force, Mimikatz, reverse
   shell, `/etc/passwd` change...) with fresh timestamps, one a minute, so the AI
@@ -40,8 +41,8 @@ changed or deleted:
 
 ## Deploy
 
-Needs `kubectl` pointed at the lab cluster, a default StorageClass, and about
-4 GiB of free memory for Ollama.
+Needs `kubectl` pointed at the cluster and about 4 GiB of free memory for
+Ollama. Everything is checked by `preflight`, which changes nothing.
 
 ```bash
 # 0. Get the code (the scripts live in the repo)
@@ -52,16 +53,35 @@ cd ai-soc-lab
 #    needed for the default simulate mode.
 cp k8s/triage/secrets.env.example k8s/triage/secrets.env
 
-# 2. See exactly what will be created; changes nothing
+# 2. Check permissions, storage and the plan
 ./scripts/k8s-triage.sh preflight
 
-# 3. Deploy (first start downloads the model, a few minutes)
+# 3. Deploy with the same settings preflight printed
 ./scripts/k8s-triage.sh up
 
 # 4. Try it
 ./scripts/k8s-triage.sh demo            # replays 6 sample Wazuh alerts
 ./scripts/k8s-triage.sh open            # http://localhost:8020/?key=...
 ```
+
+### Which namespace
+
+| Situation | What the script does |
+|---|---|
+| You can create namespaces | Creates `soc-triage` with the quota, limit range and deny-by-default network policy. |
+| You can't, and `soc-triage` doesn't exist | Stops and prints two options: deploy into an existing namespace, or the exact commands a cluster admin runs once (create `soc-triage`, apply the quota, bind your account to the `admin` role there). |
+| An admin created `soc-triage` for you | Uses it; leaves the admin's quota alone. |
+| `NAMESPACE=playground` (any existing namespace you can write to) | Shares it without changing what's there: no quota, no namespace-wide network policy, refuses if an object with the lab's names already exists, and every object it creates carries `app.kubernetes.io/part-of=soc-triage`. `down` deletes only those. |
+
+Pass the same `NAMESPACE=...` to every command (`up`, `status`, `demo`, `open`, `down`).
+
+### Storage
+
+With a default StorageClass (or `STORAGE_CLASS=<name>`), Ollama's models and
+the triage history live on PersistentVolumeClaims. Without one, the script
+switches to `emptyDir` automatically (`STORAGE=ephemeral`): everything works,
+but the ~2 GB model is downloaded again and the triage history starts over
+whenever a pod is recreated.
 
 Settings live in `k8s/triage/triage.env`: the alert source (`simulate`,
 `indexer` or `none`), the indexer URL if you use one (in-cluster
@@ -102,5 +122,8 @@ the triage pod, and set `INDEXER_CA_FILE` to the mounted path.
 ## Remove
 
 ```bash
-./scripts/k8s-triage.sh down    # asks first; deletes only the soc-triage namespace
+./scripts/k8s-triage.sh down    # asks first; deletes only what the lab created
 ```
+
+In its own `soc-triage` namespace that is the namespace; in a shared namespace
+it's only the objects labelled `app.kubernetes.io/part-of=soc-triage`.

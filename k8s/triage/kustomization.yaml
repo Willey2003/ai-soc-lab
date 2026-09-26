@@ -9,6 +9,7 @@ namespace: soc-triage
 resources:
   - namespace.yaml
   - guardrails.yaml
+  - netpol-default-deny.yaml
   - networkpolicy.yaml
   - ollama.yaml
   - triage.yaml
