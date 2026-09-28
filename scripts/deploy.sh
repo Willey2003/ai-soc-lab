@@ -18,6 +18,7 @@ Commands:
   logs        Show logs (follow)
   status      Show service status
   test        Run integration tests
+  triage-demo Replay sample Wazuh alerts through the AI triage service
   backup      Backup persistent data
   restore     Restore from backup
   generate-secrets  Generate secure secrets for .env
@@ -53,6 +54,16 @@ SCAN_SUBNET=192.168.0.0/24
 
 # NetAlertX (generated after first login)
 NETALERTX_API_TOKEN=
+
+# AI triage service (see docker/.env.example for options)
+LLM_PROVIDERS=ollama,heuristic
+OLLAMA_MODEL=llama3.2:3b
+HOSTED_API_URL=https://api.groq.com/openai/v1/chat/completions
+HOSTED_MODEL=llama-3.1-8b-instant
+HOSTED_API_KEY=
+REDACT_FOR_HOSTED=true
+TRIAGE_MIN_RULE_LEVEL=7
+TRIAGE_API_KEY=$(openssl rand -hex 32)
 EOL
     chmod 600 "${ENV_FILE}"
     echo "Secrets generated at ${ENV_FILE}"
@@ -74,6 +85,7 @@ check_env() {
         "AIRIA_API_URL"
         "AIRIA_API_KEY"
         "HELPER_API_KEY"
+        "TRIAGE_API_KEY"
     )
     
     missing=()
@@ -142,11 +154,24 @@ cmd_test() {
     curl -s -H "X-API-Key: ${HELPER_API_KEY}" "http://localhost:8010/health" | jq .
     curl -s -H "X-API-Key: ${HELPER_API_KEY}" "http://localhost:8010/api/latest" | jq .
     
+    # Test AI triage service
+    echo "Testing AI triage service..."
+    curl -s "http://localhost:8020/health" | jq .
+    curl -s -H "X-API-Key: ${TRIAGE_API_KEY}" "http://localhost:8020/api/stats" | jq .
+
     # Test Grafana
     echo "Testing Grafana..."
     curl -s -u "admin:${GRAFANA_ADMIN_PASSWORD}" "http://localhost:3000/api/health" | jq .
     
     echo "All tests passed!"
+}
+
+cmd_triage_demo() {
+    check_env
+    echo "Replaying sample Wazuh alerts through the AI triage service..."
+    docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" exec soc-triage \
+        python -m soc_triage replay samples/wazuh_alerts.jsonl
+    echo "Queue: http://localhost:8020/?key=<TRIAGE_API_KEY>"
 }
 
 cmd_backup() {
@@ -247,6 +272,9 @@ case "${1:-}" in
         ;;
     test)
         cmd_test
+        ;;
+    triage-demo)
+        cmd_triage_demo
         ;;
     backup)
         cmd_backup

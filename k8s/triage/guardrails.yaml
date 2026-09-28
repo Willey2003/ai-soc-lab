@@ -1,0 +1,31 @@
+# Caps what this namespace can take from the cluster so the lab can never
+# starve the workloads that were already running.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: soc-triage-quota
+spec:
+  hard:
+    requests.cpu: "3"
+    requests.memory: 8Gi
+    limits.cpu: "6"
+    limits.memory: 12Gi
+    persistentvolumeclaims: "4"
+    requests.storage: 40Gi
+    pods: "10"
+    services.loadbalancers: "0"
+    services.nodeports: "0"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: soc-triage-defaults
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: 500m
+        memory: 512Mi
+      defaultRequest:
+        cpu: 100m
+        memory: 128Mi

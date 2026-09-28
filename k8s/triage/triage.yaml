@@ -1,0 +1,143 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: soc-triage
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: triage-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: soc-triage
+spec:
+  replicas: 1  # SQLite on a RWO volume: keep a single writer
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: soc-triage
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: soc-triage
+    spec:
+      serviceAccountName: soc-triage
+      automountServiceAccountToken: false
+      # Created by scripts/k8s-triage.sh when GHCR_TOKEN is set (private image).
+      # If it doesn't exist the kubelet just pulls anonymously.
+      imagePullSecrets:
+        - name: ghcr-pull
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Pull the model into the in-namespace Ollama before starting. Idempotent:
+        # after the first download this finishes in a second.
+        - name: pull-model
+          image: ollama/ollama:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              case ",$LLM_PROVIDERS," in *,ollama,*) ;; *) echo "ollama not in LLM_PROVIDERS, skipping"; exit 0;; esac
+              until ollama list >/dev/null 2>&1; do echo "waiting for ollama..."; sleep 5; done
+              ollama pull "$OLLAMA_MODEL"
+          env:
+            - name: OLLAMA_HOST
+              value: ollama:11434
+            - name: HOME
+              value: /tmp
+          envFrom:
+            - configMapRef:
+                name: soc-triage-config
+          securityContext:
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        - name: soc-triage
+          image: ghcr.io/willey2003/soc-triage:latest
+          ports:
+            - name: http
+              containerPort: 8020
+          envFrom:
+            - configMapRef:
+                name: soc-triage-config
+            - secretRef:
+                name: soc-triage-secrets
+          env:
+            - name: DB_PATH
+              value: /var/lib/soc-triage/triage.db
+            - name: OLLAMA_URL
+              value: http://ollama:11434
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/soc-triage
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: triage-data
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: soc-triage
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: soc-triage
+  ports:
+    - name: http
+      port: 8020
+      targetPort: http
